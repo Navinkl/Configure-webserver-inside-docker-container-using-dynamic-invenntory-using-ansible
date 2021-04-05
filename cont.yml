@@ -1,0 +1,59 @@
+- hosts: localhost
+  tasks:
+  - name: "check docker installed or not"
+    package_facts:
+      manager: auto
+  - name: "Docker Installing"
+    command: "yum install docker-ce --nobest -y"
+    when: "'docker-ce' not in ansible_facts.packages"
+  - name: "allow all traffic"
+    service:
+      name: firewalld
+      state: stopped
+  - name: "SELinux permission"
+    ansible.posix.selinux:
+      policy: targeted
+      state: permissive
+
+  - name: "Starting docker services"
+    service:
+      name: docker
+      state: started
+      enabled: yes
+
+  - name: "Installing Python bcoz docker SDK is a python lib"
+    package:
+      name: "python3"
+      state: present
+
+  - name: "check docker sdk installed or not"
+    command: "pip3 list | grep docker"
+    register: docker_sdk
+
+  - name: "Installing Docker SDK"
+    pip:
+      name: docker-py
+    when: "docker_sdk.rc != 0"
+
+  - name: "pull docker image from docker hub"
+    docker_image:
+      name: "fullmetalnavin/centos-ssh:v1"
+      source: local
+
+
+  - name: "launch docker container"
+    docker_container:
+      name: mypage
+      image: "fullmetalnavin/centos-ssh:v1"
+      state: started
+      interactive: yes
+      detach: yes
+      tty: yes
+      ports: "8080:80"
+    register: docker
+  - name: "Load Container IP to inventory"
+    blockinfile:
+      block: |
+       [docker]
+       {{ docker.container.NetworkSettings.IPAddress }} ansible_ssh_user=root ansible_ssh_pass=root
+      path: /root/ip.txt 
